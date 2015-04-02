@@ -1,12 +1,12 @@
 all: build
 
 install-systemd-service:
-	sudo cp fbrp.service /etc/systemd/system/fbrp.service
+	sudo cp twitlistauth.service /etc/systemd/system/twitlistauth.service
 	sudo systemctl daemon-reload;
-	sudo systemctl stop fbrp.service; sudo systemctl start fbrp.service && sudo systemctl enable fbrp.service;
+	sudo systemctl stop twitlistauth.service; sudo systemctl start twitlistauth.service && sudo systemctl enable twitlistauth.service;
 
 build:
-	go build -o fbrp main.go
+	go build -o twitlistauth main.go
 
 run: build
-	./fbrp
+	./twitlistauth

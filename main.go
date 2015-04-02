@@ -2,12 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"github.com/gorilla/context"
 	"github.com/gorilla/sessions"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/facebook"
+	"github.com/mrjones/oauth"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +13,7 @@ import (
 	"strings"
 )
 
-type FbrpConfig struct {
+type TwitlistauthConfig struct {
 	AppId         string `json:"app_id"`
 	AppSecret     string `json:"app_secret"`
 	Hostname      string `json:"hostname"`
@@ -25,17 +23,20 @@ type FbrpConfig struct {
 	SessionSecret string `json:"session_secret"`
 }
 
-var CONFIG FbrpConfig
+var CONFIG TwitlistauthConfig
 
+var tokens map[string]*oauth.RequestToken
 var store *sessions.CookieStore
 var SESSION_NAME = "session-name"
 var COOKIE_HAS_AUTH = "hasAuth"
 
-var FACEBOOK_OAUTH_CONFIG oauth2.Config
-var FACEBOOK_AUTH_CALLBACK_ROUTE = "/auth/login/facebook/callback"
+var FACEBOOK_AUTH_CALLBACK_ROUTE = "/auth/login/twitter/callback"
+var consumer *oauth.Consumer
 
 func init() {
-	var configFile = flag.String("config", "./fbrp.config", "config file location")
+	tokens = make(map[string]*oauth.RequestToken)
+
+	var configFile = flag.String("config", "./twitlistauth.config", "config file location")
 	flag.Parse()
 	log.Println("reading config from:", *configFile)
 	file, err := os.Open(*configFile)
@@ -52,13 +53,15 @@ func init() {
 	}
 	store = sessions.NewCookieStore([]byte(CONFIG.SessionSecret))
 
-	FACEBOOK_OAUTH_CONFIG = oauth2.Config{
-		ClientID:     CONFIG.AppId,
-		ClientSecret: CONFIG.AppSecret,
-		RedirectURL:  "http://" + CONFIG.Hostname + FACEBOOK_AUTH_CALLBACK_ROUTE,
-		Scopes:       []string{"user_about_me", "user_groups"},
-		Endpoint:     facebook.Endpoint,
-	}
+	consumer = oauth.NewConsumer(
+		CONFIG.AppId,
+		CONFIG.AppSecret,
+		oauth.ServiceProvider{
+			RequestTokenUrl:   "https://api.twitter.com/oauth/request_token",
+			AuthorizeTokenUrl: "https://api.twitter.com/oauth/authorize",
+			AccessTokenUrl:    "https://api.twitter.com/oauth/access_token",
+		},
+	)
 }
 
 func handleFiles(prefix string) http.Handler {
@@ -81,50 +84,79 @@ func requireAuth(innerHandler http.Handler) http.Handler {
 
 func promptFacebookLogin() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		facebookLoginUrl := FACEBOOK_OAUTH_CONFIG.AuthCodeURL("login")
-		http.Redirect(w, r, facebookLoginUrl, 301)
+		callback := "http://" + CONFIG.Hostname + FACEBOOK_AUTH_CALLBACK_ROUTE
+		token, requestUrl, err := consumer.GetRequestTokenAndUrl(callback)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		tokens[token.Token] = token
+		http.Redirect(w, r, requestUrl, http.StatusTemporaryRedirect)
 	})
 }
 
-func checkFacebookGroups(token *oauth2.Token) (bool, error) {
-	client := FACEBOOK_OAUTH_CONFIG.Client(oauth2.NoContext, token)
-	resp, err := client.Get("https://graph.facebook.com/v2.3/me?fields=id,name,groups{id}")
+func isUserAllowed(accessToken *oauth.AccessToken) (bool, error) {
+	resp, err := consumer.Get(
+		"https://api.twitter.com/1.1/account/verify_credentials.json",
+		map[string]string {},
+		accessToken)
+
 	if err != nil {
-		log.Println("failed to check groups")
-		log.Println(err)
 		return false, err
 	}
-	defer resp.Body.Close()
+	
+	var result map[string]interface{}
+	decoder := json.NewDecoder(resp.Body)
+	decoder.Decode(&result)
+	resp.Body.Close()
 
-	var respData map[string]interface{}
+	userId := result["id"].(float64)
+	log.Println("read a user id")
 
-	_ = json.NewDecoder(resp.Body).Decode(&respData)
+	resp, err = consumer.Get(
+		"https://api.twitter.com/1.1/lists/members.json",
+		map[string]string {"slug": "files-mickens-io-users", "owner_screen_name": "colemickens"},
+		accessToken)
 
-	name := respData["name"].(string)
-	listOfGroups := respData["groups"].(map[string]interface{})
-	listOfGroups2 := listOfGroups["data"].([]interface{})
+	if err != nil {
+		return false, err
+	}
 
-	for _, group := range listOfGroups2 {
-		groupId := group.(map[string]interface{})["id"].(string)
-		if groupId == CONFIG.SecretGroupId {
-			log.Println("LOGIN: ", name)
+	decoder = json.NewDecoder(resp.Body)
+	decoder.Decode(&result)
+	resp.Body.Close()
+
+	userList := result["users"].([]interface{})
+	for _, user := range userList {
+		curUserId := user.(map[string]interface{})["id"].(float64)
+		log.Println("found user id in list", curUserId)
+		if curUserId == userId {
 			return true, nil
 		}
 	}
-	return false, errors.New("You don't belong to the secret group, sorry!")
+
+	// TODO(@colemickens): read pages of ids? Gross...
+
+	return false, nil
 }
 
 func handleFacebookAuth() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		code := r.FormValue("code")
-		token, _ := FACEBOOK_OAUTH_CONFIG.Exchange(oauth2.NoContext, code)
+		verifier := r.FormValue("oauth_verifier")
+		tokenKey := r.FormValue("oauth_token")
 
-		userAllowed, err := checkFacebookGroups(token)
+		accessToken, err := consumer.AuthorizeToken(tokens[tokenKey], verifier)
 		if err != nil {
-			serveString("something bad happened: "+err.Error()).ServeHTTP(w, r)
+			log.Fatal(err)
 		}
 
-		if userAllowed {
+		allowed, err := isUserAllowed(accessToken)
+		if err != nil {
+			// TODO(@colemickens): handle this better
+			log.Fatal(err)
+		}
+
+		if allowed {
 			login(w, r)
 		} else {
 			logout(w, r)
