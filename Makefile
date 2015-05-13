@@ -6,7 +6,5 @@ install-systemd-service:
 	sudo systemctl stop twitlistauth.service; sudo systemctl start twitlistauth.service && sudo systemctl enable twitlistauth.service;
 
 build:
-	go build -o twitlistauth main.go
+	gb build all
 
-run: build
-	./twitlistauth

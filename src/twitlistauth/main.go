@@ -98,13 +98,13 @@ func promptFacebookLogin() http.Handler {
 func isUserAllowed(accessToken *oauth.AccessToken) (bool, error) {
 	resp, err := consumer.Get(
 		"https://api.twitter.com/1.1/account/verify_credentials.json",
-		map[string]string {},
+		map[string]string{},
 		accessToken)
 
 	if err != nil {
 		return false, err
 	}
-	
+
 	var result map[string]interface{}
 	decoder := json.NewDecoder(resp.Body)
 	decoder.Decode(&result)
@@ -115,7 +115,7 @@ func isUserAllowed(accessToken *oauth.AccessToken) (bool, error) {
 
 	resp, err = consumer.Get(
 		"https://api.twitter.com/1.1/lists/members.json",
-		map[string]string {"slug": "files-mickens-io-users", "owner_screen_name": "colemickens"},
+		map[string]string{"slug": "files-mickens-io-users", "owner_screen_name": "colemickens"},
 		accessToken)
 
 	if err != nil {

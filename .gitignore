@@ -1,2 +1,4 @@
-twitlistauth
 twitlistauth.config
+
+bin/
+pkg/
