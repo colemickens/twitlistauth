@@ -13,24 +13,24 @@ import (
 	"strings"
 )
 
-type TwitlistauthConfig struct {
-	AppId         string `json:"app_id"`
+type twitlistauthConfig struct {
+	AppID         string `json:"app_id"`
 	AppSecret     string `json:"app_secret"`
 	Hostname      string `json:"hostname"`
-	SecretGroupId string `json:"secret_group_id"`
+	SecretGroupID string `json:"secret_group_id"`
 	ServeRoot     string `json:"serve_root"`
 	InternalPort  int    `json:"internal_port"`
 	SessionSecret string `json:"session_secret"`
 }
 
-var CONFIG TwitlistauthConfig
+var globalConfig twitlistauthConfig
 
 var tokens map[string]*oauth.RequestToken
 var store *sessions.CookieStore
-var SESSION_NAME = "session-name"
-var COOKIE_HAS_AUTH = "hasAuth"
+var sessionName = "session-name"
+var cookieHasAuth = "hasAuth"
 
-var FACEBOOK_AUTH_CALLBACK_ROUTE = "/auth/login/twitter/callback"
+var facebookAuthCallbackRoute = "/auth/login/twitter/callback"
 var consumer *oauth.Consumer
 
 func init() {
@@ -44,18 +44,18 @@ func init() {
 		panic(err)
 	}
 	decoder := json.NewDecoder(file)
-	decoder.Decode(&CONFIG)
+	decoder.Decode(&globalConfig)
 
-	log.Println(CONFIG)
+	log.Println(globalConfig)
 
-	if CONFIG.SessionSecret == "" {
+	if globalConfig.SessionSecret == "" {
 		panic("SessionSecret should never be empty")
 	}
-	store = sessions.NewCookieStore([]byte(CONFIG.SessionSecret))
+	store = sessions.NewCookieStore([]byte(globalConfig.SessionSecret))
 
 	consumer = oauth.NewConsumer(
-		CONFIG.AppId,
-		CONFIG.AppSecret,
+		globalConfig.AppID,
+		globalConfig.AppSecret,
 		oauth.ServiceProvider{
 			RequestTokenUrl:   "https://api.twitter.com/oauth/request_token",
 			AuthorizeTokenUrl: "https://api.twitter.com/oauth/authorize",
@@ -65,14 +65,14 @@ func init() {
 }
 
 func handleFiles(prefix string) http.Handler {
-	fs := http.FileServer(http.Dir(CONFIG.ServeRoot))
+	fs := http.FileServer(http.Dir(globalConfig.ServeRoot))
 	return http.StripPrefix(prefix, fs)
 }
 
 func requireAuth(innerHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, SESSION_NAME)
-		v, ok := session.Values[COOKIE_HAS_AUTH]
+		session, _ := store.Get(r, sessionName)
+		v, ok := session.Values[cookieHasAuth]
 		if ok && v.(bool) {
 			innerHandler.ServeHTTP(w, r)
 		} else {
@@ -84,14 +84,14 @@ func requireAuth(innerHandler http.Handler) http.Handler {
 
 func promptFacebookLogin() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callback := "http://" + CONFIG.Hostname + FACEBOOK_AUTH_CALLBACK_ROUTE
-		token, requestUrl, err := consumer.GetRequestTokenAndUrl(callback)
+		callback := "http://" + globalConfig.Hostname + facebookAuthCallbackRoute
+		token, requestURL, err := consumer.GetRequestTokenAndUrl(callback)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		tokens[token.Token] = token
-		http.Redirect(w, r, requestUrl, http.StatusTemporaryRedirect)
+		http.Redirect(w, r, requestURL, http.StatusTemporaryRedirect)
 	})
 }
 
@@ -110,7 +110,7 @@ func isUserAllowed(accessToken *oauth.AccessToken) (bool, error) {
 	decoder.Decode(&result)
 	resp.Body.Close()
 
-	userId := result["id"].(float64)
+	userID := result["id"].(float64)
 	log.Println("read a user id")
 
 	resp, err = consumer.Get(
@@ -128,9 +128,9 @@ func isUserAllowed(accessToken *oauth.AccessToken) (bool, error) {
 
 	userList := result["users"].([]interface{})
 	for _, user := range userList {
-		curUserId := user.(map[string]interface{})["id"].(float64)
-		log.Println("found user id in list", curUserId)
-		if curUserId == userId {
+		curUserID := user.(map[string]interface{})["id"].(float64)
+		log.Println("found user id in list", curUserID)
+		if curUserID == userID {
 			return true, nil
 		}
 	}
@@ -179,27 +179,27 @@ func serveString(message string) http.Handler {
 		if !isLoggedIn(r) {
 			isLoggedInStr = "No!"
 		}
-		contents := strings.Replace(CONTENTS, "[[[LOGGED IN]]]", isLoggedInStr, 1)
+		contents := strings.Replace(staticPageContents, "[[[LOGGED IN]]]", isLoggedInStr, 1)
 		contents = strings.Replace(contents, "[[[MESSAGE]]]", message, 1)
 		w.Write([]byte(contents))
 	})
 }
 
 func login(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, SESSION_NAME)
-	session.Values[COOKIE_HAS_AUTH] = true
+	session, _ := store.Get(r, sessionName)
+	session.Values[cookieHasAuth] = true
 	session.Save(r, w)
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, SESSION_NAME)
-	session.Values[COOKIE_HAS_AUTH] = false
+	session, _ := store.Get(r, sessionName)
+	session.Values[cookieHasAuth] = false
 	session.Save(r, w)
 }
 
 func isLoggedIn(r *http.Request) bool {
-	session, _ := store.Get(r, SESSION_NAME)
-	authd, ok := session.Values[COOKIE_HAS_AUTH]
+	session, _ := store.Get(r, sessionName)
+	authd, ok := session.Values[cookieHasAuth]
 	if ok && authd.(bool) {
 		return true
 	}
@@ -207,22 +207,22 @@ func isLoggedIn(r *http.Request) bool {
 }
 
 func main() {
-	http.Handle(FACEBOOK_AUTH_CALLBACK_ROUTE, handleFacebookAuth())
+	http.Handle(facebookAuthCallbackRoute, handleFacebookAuth())
 	http.Handle("/auth/login", promptFacebookLogin())
 	http.Handle("/auth/logout", handleLogout())
 
-	FILES_PREFIX := "/files/"
-	http.Handle(FILES_PREFIX, requireAuth(handleFiles(FILES_PREFIX)))
+	filesPrefix := "/files/"
+	http.Handle(filesPrefix, requireAuth(handleFiles(filesPrefix)))
 
 	http.Handle("/", serveString(""))
 
-	err := http.ListenAndServe(":"+strconv.Itoa(CONFIG.InternalPort), context.ClearHandler(http.DefaultServeMux))
+	err := http.ListenAndServe(":"+strconv.Itoa(globalConfig.InternalPort), context.ClearHandler(http.DefaultServeMux))
 	if err != nil {
 		panic(err)
 	}
 }
 
-const CONTENTS = `
+const staticPageContents = `
 <html>
 <head></head>
 <body>
