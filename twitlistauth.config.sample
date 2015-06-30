@@ -1,0 +1,9 @@
+{
+        "APP_ID": "[ APP ID HERE ]",
+        "APP_SECRET": "[ APP SECRET HERE ]",
+        "HOSTNAME": "files.mickens.io",
+        "secret_group_id": "192917787555052",
+        "serve_root": "/media/data/Media",
+        "internal_port": 3333,
+        "session_secret": "[ MAKE YOUR OWN SECRET HERE ]"
+}
