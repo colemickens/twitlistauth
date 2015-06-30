@@ -1,0 +1,29 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/gorilla/sessions",
+			"repository": "https://github.com/gorilla/sessions",
+			"revision": "f61c3ec2cf65d69e7efedfd4d060fe128882c951",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/gorilla/context",
+			"repository": "https://github.com/gorilla/context",
+			"revision": "215affda49addc4c8ef7e2534915df2c8c35c6cd",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/gorilla/securecookie",
+			"repository": "https://github.com/gorilla/securecookie",
+			"revision": "68004d2ba3cbc80d3a9949ea431b5c9f22ee8707",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/mrjones/oauth",
+			"repository": "https://github.com/mrjones/oauth",
+			"revision": "a234b7b4476b5b5089f31e197f3786cdab0d0adf",
+			"branch": "master"
+		}
+	]
+}
