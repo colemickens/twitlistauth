@@ -226,12 +226,15 @@ const staticPageContents = `
 <html>
 <head></head>
 <body>
-<p>Message: [[[MESSAGE]]]</p>
-<p>Logged in? [[[LOGGED IN]]] </p>
+<p>Source code: <a href="https://github.com/colemickens/twitlistauth">https://github.com/colemickens/twitlistauth</a></p>
+<p>[[[MESSAGE]]]</p>
 <ul>
 <li><a href="/auth/login">login</a><br/></li>
 <li><a href="/auth/logout">logout</a></li>
-<li><a href="/files">files</a><br/></li>
+</ul>
+<p>Logged in? [[[LOGGED IN]]] </p>
+<ul>
+<li><strong><a href="/files">files</a></strong><br/></li>
 </ul>
 </body>
 </html>
