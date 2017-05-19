@@ -14,13 +14,15 @@ import (
 )
 
 type twitlistauthConfig struct {
-	AppID         string `json:"app_id"`
-	AppSecret     string `json:"app_secret"`
-	Hostname      string `json:"hostname"`
-	SecretGroupID string `json:"secret_group_id"`
-	ServeRoot     string `json:"serve_root"`
-	InternalPort  int    `json:"internal_port"`
-	SessionSecret string `json:"session_secret"`
+	AppID           string `json:"app_id"`
+	AppSecret       string `json:"app_secret"`
+	Hostname        string `json:"hostname"`
+	SecretGroupID   string `json:"secret_group_id"`
+	ServeRoot       string `json:"serve_root"`
+	InternalPort    int    `json:"internal_port"`
+	SessionSecret   string `json:"session_secret"`
+	ColeAccessToken string `json:"cole_access_token"`
+	ColeTokenSecret string `json:"cole_token_secret"`
 }
 
 var globalConfig twitlistauthConfig
@@ -111,12 +113,19 @@ func isUserAllowed(accessToken *oauth.AccessToken) (bool, error) {
 	resp.Body.Close()
 
 	userID := result["id"].(float64)
-	log.Println("read a user id")
+	screenName := result["screen_name"].(string)
+	name := result["name"].(string)
+	log.Printf("login from user: (%f) (%s) (%s)", userID, screenName, name)
+
+	coleAccessToken := &oauth.AccessToken{
+		Token:  globalConfig.ColeAccessToken,
+		Secret: globalConfig.ColeTokenSecret,
+	}
 
 	resp, err = consumer.Get(
 		"https://api.twitter.com/1.1/lists/members.json",
 		map[string]string{"slug": "files-mickens-io-users", "owner_screen_name": "colemickens"},
-		accessToken)
+		coleAccessToken)
 
 	if err != nil {
 		return false, err
@@ -129,7 +138,6 @@ func isUserAllowed(accessToken *oauth.AccessToken) (bool, error) {
 	userList := result["users"].([]interface{})
 	for _, user := range userList {
 		curUserID := user.(map[string]interface{})["id"].(float64)
-		log.Println("found user id in list", curUserID)
 		if curUserID == userID {
 			return true, nil
 		}
@@ -206,9 +214,20 @@ func isLoggedIn(r *http.Request) bool {
 	return false
 }
 
+func handleCheck() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isLoggedIn(r) {
+			http.Error(w, "OK", 200)
+		} else {
+			http.Error(w, "Unauthenticated", 401)
+		}
+	})
+}
+
 func main() {
 	http.Handle(facebookAuthCallbackRoute, handleFacebookAuth())
 	http.Handle("/auth/login", promptFacebookLogin())
+	http.Handle("/auth/check", handleCheck())
 	http.Handle("/auth/logout", handleLogout())
 
 	filesPrefix := "/files/"
